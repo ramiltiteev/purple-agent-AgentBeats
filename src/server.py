@@ -24,20 +24,20 @@ def main():
     # See: https://a2a-protocol.org/latest/tutorials/python/3-agent-skills-and-card/
     
     skill = AgentSkill(
-        id="",
-        name="",
-        description="",
-        tags=[],
-        examples=[]
+        id="mle-bench",
+        name="MLE-Bench Solver",
+        description="Solves Kaggle ML competitions: trains models, generates predictions, returns submission.csv",
+        tags=["machine-learning", "kaggle", "tabular", "prediction"],
+        examples=["Solve this Kaggle competition and return submission.csv"]
     )
 
     agent_card = AgentCard(
-        name="",
-        description="",
+        name="Purple MLE-Bench Agent",
+        description="An agent that solves Kaggle competitions from the MLE-Bench benchmark using LightGBM/XGBoost/scikit-learn.",
         url=args.card_url or f"http://{args.host}:{args.port}/",
         version='1.0.0',
-        default_input_modes=['text'],
-        default_output_modes=['text'],
+        default_input_modes=['text', 'file'],
+        default_output_modes=['text', 'file'],
         capabilities=AgentCapabilities(streaming=True),
         skills=[skill]
     )

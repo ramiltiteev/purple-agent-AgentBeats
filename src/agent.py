@@ -29,7 +29,6 @@ class Agent:
         self.messenger = Messenger()
         self._workdir: Path | None = None
         self._workdir_obj = None  # держим tempfile объект живым
-        self._competition_id: str | None = None
         self._instructions: str = ""
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
@@ -137,6 +136,14 @@ class Agent:
         )
 
         # Читаем превью данных
+        description_info = ""
+        for f in data_dir.rglob("description.md"):
+            try:
+                description_info = f"\nCOMPETITION DESCRIPTION:\n{f.read_text()[:3000]}"
+                break
+            except Exception:
+                pass
+
         sample_info = ""
         for f in data_dir.rglob("sample_submission*"):
             try:
@@ -148,13 +155,13 @@ class Agent:
         train_info = ""
         for f in data_dir.rglob("train.csv"):
             try:
-                train_info = f"\nTrain preview:\n{f.read_text()[:1000]}"
+                train_info = f"\nTrain preview (first rows):\n{f.read_text()[:1000]}"
                 break
             except Exception:
                 pass
 
         # Генерируем код
-        code = await self._generate_code(files_info, sample_info, train_info)
+        code = await self._generate_code(files_info, sample_info, train_info, data_dir, description_info)
 
         # Запускаем
         submission_bytes = await self._run_with_retry(code, updater)
@@ -177,27 +184,31 @@ class Agent:
             name="submission",
         )
 
-    async def _generate_code(self, files_info: str, sample_info: str, train_info: str) -> str:
+    async def _generate_code(self, files_info: str, sample_info: str, train_info: str, data_dir: Path, description_info: str = "") -> str:
         prompt = f"""You are an expert ML engineer solving a Kaggle competition.
 
 COMPETITION INSTRUCTIONS:
 {self._instructions}
+{description_info}
 
-FILES (relative to /workdir):
+FILES available (actual paths on disk):
 {files_info}
+
+DATA DIRECTORY: {data_dir}
+OUTPUT PATH: {self._workdir}/submission.csv
 {train_info}
 {sample_info}
 
 Write a complete Python script that:
-1. Loads data from /workdir/home/data/
-2. Trains a simple scikit-learn model (RandomForest or LogisticRegression)
+1. Loads data from {data_dir}/
+2. Trains a model (prefer LightGBM or XGBoost; fall back to RandomForest)
 3. Makes predictions on test data
-4. Saves to /workdir/submission.csv in the exact format of sample_submission.csv
+4. Saves to {self._workdir}/submission.csv in the exact format of sample_submission.csv
 
 Rules:
-- Use only: pandas, numpy, scikit-learn
+- Use actual absolute paths as shown above, never /workdir or relative paths
+- Available libraries: pandas, numpy, scikit-learn, lightgbm, xgboost
 - Handle missing values with fillna or SimpleImputer
-- Save submission.csv to exactly /workdir/submission.csv
 - Output ONLY raw Python code, no markdown, no explanation
 """
         response = await client.chat.completions.create(
@@ -258,7 +269,8 @@ STDOUT:
 ORIGINAL CODE:
 {code}
 
-Fix it. Data is in /workdir/home/data/, save to /workdir/submission.csv.
+Fix it. Data is in {self._workdir}/home/data/, save to {self._workdir}/submission.csv.
+Use actual absolute paths, never /workdir or relative paths.
 Output ONLY raw Python code, no markdown.
 """
         fix_response = await client.chat.completions.create(
